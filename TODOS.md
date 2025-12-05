@@ -17,7 +17,8 @@
 - [x] Alarm-based batch chaining
 - [x] Basic job lifecycle (create -> running -> complete/needs_followup)
 - [x] Wrangler deployment commands file (worker/COMMANDS.txt)
-- [ ] Test DO persistence between alarms (requires deployment)
+- [x] Deploy worker to Cloudflare (grove-domain-tool-dev)
+- [ ] Test DO persistence between alarms
 
 ## Phase 3: AI Orchestration - COMPLETE
 - [x] Implement driver agent with prompt templates
@@ -27,6 +28,8 @@
 - [x] Add provider abstraction for Claude/Kimi/Mock
 - [x] Create orchestrator with state management
 - [x] CLI: `grove-domain-tool search "Business Name" --mock`
+- [x] CLI: Real AI search with Claude API (tested & working)
+- [x] Fix terminal output to show domains with unknown pricing
 
 ## Phase 4: MCP Server
 - [ ] Implement MCP tool definitions
@@ -66,14 +69,22 @@
 
 ---
 
-## Next Steps (Requires Local Environment)
+## Next Steps
 
-1. **Deploy Worker**: Run wrangler commands in `worker/COMMANDS.txt`
-2. **Add API Keys**: Set ANTHROPIC_API_KEY secret in Cloudflare
-3. **Test Real AI**: Remove --mock flag and test with real Claude API
-4. **MCP Integration**: Implement MCP server for Claude Desktop integration
+1. **Fix AI prompts**: Domain generation is producing generic domains instead of business-themed ones
+2. **Test DO persistence**: Verify Durable Object state survives between alarm calls
+3. **MCP Integration**: Implement MCP server for Claude Desktop integration
+4. **Production deployment**: Deploy to production environment when ready
+
+## Completed Recently
+
+- [x] Renamed project to GroveDomainTool (from grove-domain-search)
+- [x] Deployed worker to Cloudflare dev environment
+- [x] Set ANTHROPIC_API_KEY secret
+- [x] Tested real AI search (working, but prompts need tuning)
 
 ---
 
-*Last updated: 2025-11-29*
+*Last updated: 2025-12-05*
 *73 tests passing*
+*Worker: https://grove-domain-tool-dev.m7jv4v7npb.workers.dev*
