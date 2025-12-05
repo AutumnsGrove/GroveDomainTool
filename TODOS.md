@@ -96,7 +96,13 @@ Current state: Only the worker + Anthropic API key exist. No bindings configured
 - Worker routes requests to DO instances (one DO per job_id)
 - DO can make HTTP calls to external services (like Anthropic API directly in TypeScript)
 
-**Decision needed:** Port orchestrator to TypeScript in DO, or have DO call Python API?
+**Decision: Port orchestrator to TypeScript in DO** (Cloudflare only runs JS/TS)
+
+The Python orchestrator is ~300 lines + prompt templates. Port plan:
+- `SearchJobDO` class handles state + alarms (already exists)
+- Add TypeScript versions of: driver agent, swarm agent, RDAP checker
+- Use Anthropic SDK for TypeScript (`@anthropic-ai/sdk`)
+- Prompts are just strings - easy to copy over
 
 ### 3. Test Full End-to-End Flow
 - Submit quiz via API
