@@ -14,15 +14,19 @@ import type {
   FollowupQuizResponse,
   BatchResult,
   SearchStatus,
-  AlarmData,
 } from "./types";
+import { generateCandidates, type DomainCandidate } from "./agents/driver";
+import { evaluateDomains, filterWorthChecking, type DomainEvaluation } from "./agents/swarm";
+import { checkDomainsParallel, type DomainCheckResult } from "./rdap";
 
 export class SearchJobDO implements DurableObject {
+  private state: DurableObjectState;
   private sql: SqlStorage;
   private env: Env;
   private initialized = false;
 
   constructor(state: DurableObjectState, env: Env) {
+    this.state = state;
     this.sql = state.storage.sql;
     this.env = env;
   }
@@ -45,14 +49,16 @@ export class SearchJobDO implements DurableObject {
         followup_responses TEXT,
         created_at TEXT DEFAULT (datetime('now')),
         updated_at TEXT DEFAULT (datetime('now')),
-        error TEXT
+        error TEXT,
+        total_input_tokens INTEGER DEFAULT 0,
+        total_output_tokens INTEGER DEFAULT 0
       );
 
       -- Individual domain results
       CREATE TABLE IF NOT EXISTS domain_results (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         batch_num INTEGER NOT NULL,
-        domain TEXT NOT NULL,
+        domain TEXT NOT NULL UNIQUE,
         tld TEXT NOT NULL,
         status TEXT NOT NULL,
         price_cents INTEGER,
@@ -107,6 +113,12 @@ export class SearchJobDO implements DurableObject {
       if (request.method === "GET" && path === "/followup") {
         return this.handleGetFollowup();
       }
+      if (request.method === "POST" && path === "/cancel") {
+        return this.handleCancel();
+      }
+      if (request.method === "GET" && path === "/stream") {
+        return this.handleStream();
+      }
 
       return new Response("Not found", { status: 404 });
     } catch (error) {
@@ -131,7 +143,7 @@ export class SearchJobDO implements DurableObject {
     }
 
     if (job.status !== "running") {
-      console.log("Job not running, skipping alarm");
+      console.log(`Job status is ${job.status}, skipping alarm`);
       return;
     }
 
@@ -139,23 +151,28 @@ export class SearchJobDO implements DurableObject {
       // Process next batch
       const result = await this.processBatch(job);
 
+      // Get updated job state
+      const updatedJob = this.getJob();
+      if (!updatedJob) return;
+
       // Check if we should continue
       const maxBatches = parseInt(this.env.MAX_BATCHES || "6", 10);
       const targetResults = parseInt(this.env.TARGET_RESULTS || "25", 10);
       const goodResults = this.getGoodResultsCount();
 
+      console.log(`Batch ${updatedJob.batch_num} complete: ${result.domains_available} available, ${goodResults} total good`);
+
       if (goodResults >= targetResults) {
-        // Success! Send results email
+        // Success!
         this.updateJobStatus("complete");
-        // TODO: Trigger email via separate alarm or queue
-      } else if (job.batch_num >= maxBatches) {
+        console.log(`Search complete with ${goodResults} good results`);
+      } else if (updatedJob.batch_num >= maxBatches) {
         // Need follow-up
         this.updateJobStatus("needs_followup");
-        // TODO: Generate follow-up quiz and send email
+        console.log(`Max batches reached, needs follow-up`);
       } else {
-        // Schedule next batch
-        const alarmDelay = 10 * 1000; // 10 seconds
-        await this.scheduleAlarm(alarmDelay);
+        // Schedule next batch (10 second delay between batches)
+        await this.scheduleAlarm(10 * 1000);
       }
     } catch (error) {
       console.error("Batch processing error:", error);
@@ -214,6 +231,7 @@ export class SearchJobDO implements DurableObject {
 
     const domainsChecked = this.getTotalDomainsChecked();
     const goodResults = this.getGoodResultsCount();
+    const availableDomains = this.getAvailableDomainsCount();
 
     return new Response(
       JSON.stringify({
@@ -221,6 +239,7 @@ export class SearchJobDO implements DurableObject {
         status: job.status,
         batch_num: job.batch_num,
         domains_checked: domainsChecked,
+        domains_available: availableDomains,
         good_results: goodResults,
         created_at: job.created_at,
         updated_at: job.updated_at,
@@ -242,23 +261,32 @@ export class SearchJobDO implements DurableObject {
     }
 
     // Get all available domains, sorted by score
-    const results = this.sql.exec<DomainResult>(
+    const results = this.sql.exec(
       `SELECT * FROM domain_results
        WHERE status = 'available'
        ORDER BY score DESC, price_cents ASC
        LIMIT 50`
-    ).toArray();
+    ).toArray() as unknown as DomainResult[];
 
     // Pricing summary
     const pricingSummary = this.getPricingSummary();
+
+    // Token usage
+    const usage = this.getTokenUsage();
 
     return new Response(
       JSON.stringify({
         job_id: job.id,
         status: job.status,
+        batch_num: job.batch_num,
         domains: results,
         total_checked: this.getTotalDomainsChecked(),
         pricing_summary: pricingSummary,
+        usage: {
+          input_tokens: usage.input,
+          output_tokens: usage.output,
+          total_tokens: usage.input + usage.output,
+        },
       }),
       { headers: { "Content-Type": "application/json" } }
     );
@@ -306,6 +334,42 @@ export class SearchJobDO implements DurableObject {
   }
 
   /**
+   * Cancel a running job
+   */
+  private handleCancel(): Response {
+    const job = this.getJob();
+    if (!job) {
+      return new Response(
+        JSON.stringify({ error: "No job found" }),
+        { status: 404, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    if (job.status !== "running" && job.status !== "pending") {
+      return new Response(
+        JSON.stringify({
+          error: "Job not running",
+          status: job.status,
+          job_id: job.id
+        }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    // Update status to cancelled
+    this.updateJobStatus("cancelled");
+
+    return new Response(
+      JSON.stringify({
+        job_id: job.id,
+        status: "cancelled",
+        message: "Job cancelled successfully"
+      }),
+      { headers: { "Content-Type": "application/json" } }
+    );
+  }
+
+  /**
    * Get follow-up quiz
    */
   private handleGetFollowup(): Response {
@@ -318,12 +382,13 @@ export class SearchJobDO implements DurableObject {
     }
 
     // Get the most recent follow-up quiz artifact
-    const artifact = this.sql.exec<SearchArtifact>(
+    const artifacts = this.sql.exec(
       `SELECT * FROM search_artifacts
        WHERE artifact_type = 'followup_quiz'
        ORDER BY created_at DESC
        LIMIT 1`
-    ).toArray()[0];
+    ).toArray() as unknown as SearchArtifact[];
+    const artifact = artifacts[0];
 
     if (!artifact) {
       return new Response(
@@ -334,6 +399,42 @@ export class SearchJobDO implements DurableObject {
 
     return new Response(artifact.content, {
       headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  /**
+   * SSE stream for real-time progress updates
+   */
+  private handleStream(): Response {
+    const job = this.getJob();
+    if (!job) {
+      return new Response(
+        JSON.stringify({ error: "No job found" }),
+        { status: 404, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    // Return current state as SSE event
+    const domainsChecked = this.getTotalDomainsChecked();
+    const goodResults = this.getGoodResultsCount();
+    const availableDomains = this.getAvailableDomainsCount();
+
+    const data = JSON.stringify({
+      event: "status",
+      job_id: job.id,
+      status: job.status,
+      batch_num: job.batch_num,
+      domains_checked: domainsChecked,
+      domains_available: availableDomains,
+      good_results: goodResults,
+    });
+
+    return new Response(`data: ${data}\n\n`, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+      },
     });
   }
 
@@ -400,9 +501,37 @@ export class SearchJobDO implements DurableObject {
     return job?.batch_num ?? 0;
   }
 
+  private addTokenUsage(inputTokens: number, outputTokens: number): void {
+    this.sql.exec(
+      `UPDATE search_job
+       SET total_input_tokens = total_input_tokens + ?,
+           total_output_tokens = total_output_tokens + ?,
+           updated_at = datetime('now')`,
+      inputTokens,
+      outputTokens
+    );
+  }
+
+  private getTokenUsage(): { input: number; output: number } {
+    const result = this.sql.exec<{ total_input_tokens: number; total_output_tokens: number }>(
+      "SELECT total_input_tokens, total_output_tokens FROM search_job LIMIT 1"
+    ).toArray();
+    return {
+      input: result[0]?.total_input_tokens ?? 0,
+      output: result[0]?.total_output_tokens ?? 0,
+    };
+  }
+
   private getTotalDomainsChecked(): number {
     const result = this.sql.exec<{ count: number }>(
       "SELECT COUNT(*) as count FROM domain_results"
+    ).toArray();
+    return result[0]?.count ?? 0;
+  }
+
+  private getAvailableDomainsCount(): number {
+    const result = this.sql.exec<{ count: number }>(
+      "SELECT COUNT(*) as count FROM domain_results WHERE status = 'available'"
     ).toArray();
     return result[0]?.count ?? 0;
   }
@@ -415,10 +544,25 @@ export class SearchJobDO implements DurableObject {
     return result[0]?.count ?? 0;
   }
 
+  private getCheckedDomains(): string[] {
+    const results = this.sql.exec<{ domain: string }>(
+      "SELECT domain FROM domain_results"
+    ).toArray();
+    return results.map(r => r.domain);
+  }
+
+  private getAvailableDomains(): string[] {
+    const results = this.sql.exec<{ domain: string }>(
+      "SELECT domain FROM domain_results WHERE status = 'available'"
+    ).toArray();
+    return results.map(r => r.domain);
+  }
+
   private getPricingSummary(): Record<string, number> {
     const rows = this.sql.exec<{ category: string; count: number }>(`
       SELECT
         CASE
+          WHEN price_cents IS NULL THEN 'unknown'
           WHEN price_cents <= 3000 THEN 'bundled'
           WHEN price_cents <= 5000 THEN 'recommended'
           WHEN price_cents > 5000 THEN 'premium'
@@ -435,6 +579,7 @@ export class SearchJobDO implements DurableObject {
       recommended: 0,
       standard: 0,
       premium: 0,
+      unknown: 0,
     };
 
     for (const row of rows) {
@@ -446,25 +591,28 @@ export class SearchJobDO implements DurableObject {
 
   private async scheduleAlarm(delayMs: number): Promise<void> {
     const time = Date.now() + delayMs;
-    // Note: In actual Cloudflare Workers, you'd use:
-    // await this.state.storage.setAlarm(time);
-    console.log(`Scheduling alarm for ${new Date(time).toISOString()}`);
+    await this.state.storage.setAlarm(time);
+    console.log(`Scheduled alarm for ${new Date(time).toISOString()}`);
   }
 
   private saveDomainResult(result: DomainResult): void {
-    this.sql.exec(
-      `INSERT INTO domain_results
-       (batch_num, domain, tld, status, price_cents, score, flags, evaluation_data)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      result.batch_num,
-      result.domain,
-      result.tld,
-      result.status,
-      result.price_cents ?? null,
-      result.score,
-      JSON.stringify(result.flags),
-      result.evaluation_data ? JSON.stringify(result.evaluation_data) : null
-    );
+    try {
+      this.sql.exec(
+        `INSERT OR REPLACE INTO domain_results
+         (batch_num, domain, tld, status, price_cents, score, flags, evaluation_data)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        result.batch_num,
+        result.domain,
+        result.tld,
+        result.status,
+        result.price_cents ?? null,
+        result.score,
+        JSON.stringify(result.flags),
+        result.evaluation_data ? JSON.stringify(result.evaluation_data) : null
+      );
+    } catch (error) {
+      console.error(`Failed to save domain result for ${result.domain}:`, error);
+    }
   }
 
   private saveArtifact(artifact: SearchArtifact): void {
@@ -478,31 +626,192 @@ export class SearchJobDO implements DurableObject {
   }
 
   /**
-   * Process a single batch
+   * Process a single batch - the main orchestration logic
    *
-   * This is a stub - the actual AI processing happens in Python.
-   * In a full implementation, this would:
-   * 1. Call Python API/MCP to run the AI agents
-   * 2. Check domains via RDAP
-   * 3. Store results
+   * Flow:
+   * 1. Driver agent generates domain candidates
+   * 2. Swarm agent evaluates candidates in parallel
+   * 3. RDAP checker verifies availability
+   * 4. Store results
    */
   private async processBatch(job: SearchJob): Promise<BatchResult> {
     const batchNum = this.incrementBatchNum();
     const startTime = Date.now();
 
-    // TODO: Integrate with Python orchestrator via HTTP or MCP
-    // For now, this is a placeholder that shows the structure
+    const apiKey = this.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      throw new Error("ANTHROPIC_API_KEY not configured");
+    }
 
-    console.log(`Processing batch ${batchNum} for job ${job.id}`);
+    const quiz = job.quiz_responses;
+    const maxBatches = parseInt(this.env.MAX_BATCHES || "6", 10);
 
-    // Simulate batch processing result
+    // Build previous results context
+    const checkedDomains = this.getCheckedDomains();
+    const availableDomains = this.getAvailableDomains();
+    const targetCount = parseInt(this.env.TARGET_RESULTS || "25", 10);
+
+    const previousResults = batchNum > 1 ? {
+      checked_count: checkedDomains.length,
+      available_count: availableDomains.length,
+      target_count: targetCount,
+      tried_summary: checkedDomains.slice(-50).join(", ") || "None yet",
+      available_summary: availableDomains.slice(-20).join(", ") || "None yet",
+      taken_patterns: this.analyzeTakenPatterns(checkedDomains, availableDomains),
+    } : undefined;
+
+    console.log(`Processing batch ${batchNum} for "${quiz.business_name}"`);
+
+    // Step 1: Generate candidates via Driver agent
+    console.log("Step 1: Generating candidates...");
+    const driverResult = await generateCandidates(apiKey, {
+      businessName: quiz.business_name,
+      tldPreferences: quiz.tld_preferences,
+      vibe: quiz.vibe,
+      batchNum,
+      count: 50,
+      maxBatches,
+      domainIdea: quiz.domain_idea,
+      keywords: quiz.keywords,
+      previousResults,
+    });
+
+    this.addTokenUsage(driverResult.inputTokens, driverResult.outputTokens);
+    console.log(`Generated ${driverResult.candidates.length} candidates`);
+
+    // Filter out already checked domains
+    const checkedSet = new Set(checkedDomains.map(d => d.toLowerCase()));
+    const newCandidates = driverResult.candidates.filter(
+      c => !checkedSet.has(c.domain.toLowerCase())
+    );
+
+    if (newCandidates.length === 0) {
+      console.log("No new candidates to evaluate");
+      return {
+        batch_num: batchNum,
+        candidates_generated: driverResult.candidates.length,
+        candidates_evaluated: 0,
+        domains_checked: 0,
+        domains_available: 0,
+        new_good_results: 0,
+        duration_ms: Date.now() - startTime,
+      };
+    }
+
+    // Step 2: Evaluate candidates via Swarm agent
+    console.log(`Step 2: Evaluating ${newCandidates.length} candidates...`);
+    const swarmResult = await evaluateDomains(apiKey, {
+      domains: newCandidates.map(c => c.domain),
+      vibe: quiz.vibe,
+      businessName: quiz.business_name,
+    });
+
+    this.addTokenUsage(swarmResult.inputTokens, swarmResult.outputTokens);
+
+    // Filter to worth-checking domains
+    const worthChecking = filterWorthChecking(swarmResult.evaluations);
+    console.log(`${worthChecking.length} domains worth checking`);
+
+    if (worthChecking.length === 0) {
+      // Save all as not worth checking
+      for (const evalResult of swarmResult.evaluations) {
+        const candidate = newCandidates.find(c => c.domain === evalResult.domain);
+        this.saveDomainResult({
+          batch_num: batchNum,
+          domain: evalResult.domain,
+          tld: candidate?.tld || evalResult.domain.split(".").pop() || "",
+          status: "unknown",
+          score: evalResult.score,
+          flags: evalResult.flags,
+          evaluation_data: { reason: "not_worth_checking" },
+        });
+      }
+
+      return {
+        batch_num: batchNum,
+        candidates_generated: driverResult.candidates.length,
+        candidates_evaluated: swarmResult.evaluations.length,
+        domains_checked: 0,
+        domains_available: 0,
+        new_good_results: 0,
+        duration_ms: Date.now() - startTime,
+      };
+    }
+
+    // Step 3: Check availability via RDAP
+    console.log(`Step 3: Checking availability for ${worthChecking.length} domains...`);
+    const domainsToCheck = worthChecking.map(e => e.domain);
+    const rdapResults = await checkDomainsParallel(domainsToCheck, 5, 500);
+
+    // Map evaluations by domain for quick lookup
+    const evalMap = new Map<string, DomainEvaluation>();
+    for (const e of swarmResult.evaluations) {
+      evalMap.set(e.domain.toLowerCase(), e);
+    }
+
+    // Step 4: Save results
+    let domainsAvailable = 0;
+    let newGoodResults = 0;
+
+    for (const rdapResult of rdapResults) {
+      const evaluation = evalMap.get(rdapResult.domain.toLowerCase());
+      const candidate = newCandidates.find(
+        c => c.domain.toLowerCase() === rdapResult.domain.toLowerCase()
+      );
+
+      const domainResult: DomainResult = {
+        batch_num: batchNum,
+        domain: rdapResult.domain,
+        tld: candidate?.tld || rdapResult.domain.split(".").pop() || "",
+        status: rdapResult.status,
+        score: evaluation?.score ?? 0.5,
+        flags: evaluation?.flags ?? [],
+        evaluation_data: {
+          pronounceable: evaluation?.pronounceable,
+          memorable: evaluation?.memorable,
+          brand_fit: evaluation?.brandFit,
+          email_friendly: evaluation?.emailFriendly,
+          notes: evaluation?.notes,
+          rdap_registrar: rdapResult.registrar,
+          rdap_expiration: rdapResult.expiration,
+        },
+      };
+
+      this.saveDomainResult(domainResult);
+
+      if (rdapResult.status === "available") {
+        domainsAvailable++;
+        if ((evaluation?.score ?? 0) >= 0.4) {
+          newGoodResults++;
+        }
+      }
+    }
+
+    // Also save skipped domains (low score)
+    for (const evalItem of swarmResult.evaluations) {
+      if (!worthChecking.find(w => w.domain === evalItem.domain)) {
+        const candidate = newCandidates.find(c => c.domain === evalItem.domain);
+        this.saveDomainResult({
+          batch_num: batchNum,
+          domain: evalItem.domain,
+          tld: candidate?.tld || evalItem.domain.split(".").pop() || "",
+          status: "unknown",
+          score: evalItem.score,
+          flags: evalItem.flags,
+          evaluation_data: { reason: "low_score", notes: evalItem.notes },
+        });
+      }
+    }
+
+    console.log(`Batch ${batchNum} complete: ${domainsAvailable} available, ${newGoodResults} good`);
+
     const result: BatchResult = {
       batch_num: batchNum,
-      candidates_generated: 0,
-      candidates_evaluated: 0,
-      domains_checked: 0,
-      domains_available: 0,
-      new_good_results: 0,
+      candidates_generated: driverResult.candidates.length,
+      candidates_evaluated: swarmResult.evaluations.length,
+      domains_checked: rdapResults.length,
+      domains_available: domainsAvailable,
+      new_good_results: newGoodResults,
       duration_ms: Date.now() - startTime,
     };
 
@@ -514,5 +823,35 @@ export class SearchJobDO implements DurableObject {
     });
 
     return result;
+  }
+
+  /**
+   * Analyze patterns in taken domains to help driver avoid them
+   */
+  private analyzeTakenPatterns(checked: string[], available: string[]): string {
+    const availableSet = new Set(available.map(d => d.toLowerCase()));
+    const taken = checked.filter(d => !availableSet.has(d.toLowerCase()));
+
+    if (taken.length === 0) return "No clear patterns yet";
+
+    // Count TLDs
+    const tldCounts: Record<string, number> = {};
+    for (const domain of taken) {
+      const tld = domain.split(".").pop() || "";
+      tldCounts[tld] = (tldCounts[tld] || 0) + 1;
+    }
+
+    const patterns: string[] = [];
+
+    // Most taken TLDs
+    const sortedTlds = Object.entries(tldCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3);
+
+    if (sortedTlds.length > 0) {
+      patterns.push(`Most taken TLDs: ${sortedTlds.map(([tld, count]) => `.${tld} (${count})`).join(", ")}`);
+    }
+
+    return patterns.join("; ") || "Various patterns all taken";
   }
 }

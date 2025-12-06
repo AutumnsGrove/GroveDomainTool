@@ -104,6 +104,10 @@ async function handleApiRequest(
       return handleFollowup(request, env, url);
     case "resume":
       return handleResume(request, env, url);
+    case "cancel":
+      return handleCancel(request, env, url);
+    case "stream":
+      return handleStream(request, env, url);
     default:
       return new Response(
         JSON.stringify({ error: `Unknown action: ${action}` }),
@@ -232,6 +236,36 @@ async function handleFollowup(
 }
 
 /**
+ * Cancel a running search
+ * POST /api/cancel?job_id=xxx
+ */
+async function handleCancel(
+  request: Request,
+  env: Env,
+  url: URL
+): Promise<Response> {
+  if (request.method !== "POST") {
+    return new Response(
+      JSON.stringify({ error: "Method not allowed" }),
+      { status: 405, headers: { "Content-Type": "application/json" } }
+    );
+  }
+
+  const jobId = url.searchParams.get("job_id");
+  if (!jobId) {
+    return new Response(
+      JSON.stringify({ error: "Missing job_id parameter" }),
+      { status: 400, headers: { "Content-Type": "application/json" } }
+    );
+  }
+
+  const doId = env.SEARCH_JOB.idFromName(jobId);
+  const stub = env.SEARCH_JOB.get(doId);
+
+  return stub.fetch(new Request("http://do/cancel", { method: "POST" }));
+}
+
+/**
  * Resume search with follow-up responses
  * POST /api/resume?job_id=xxx
  * Body: { followup_responses: Record<string, string | string[]> }
@@ -268,4 +302,37 @@ async function handleResume(
       body: JSON.stringify(body),
     })
   );
+}
+
+/**
+ * Stream search progress (SSE)
+ * GET /api/stream?job_id=xxx
+ */
+async function handleStream(
+  request: Request,
+  env: Env,
+  url: URL
+): Promise<Response> {
+  const jobId = url.searchParams.get("job_id");
+  if (!jobId) {
+    return new Response(
+      JSON.stringify({ error: "Missing job_id parameter" }),
+      { status: 400, headers: { "Content-Type": "application/json" } }
+    );
+  }
+
+  const doId = env.SEARCH_JOB.idFromName(jobId);
+  const stub = env.SEARCH_JOB.get(doId);
+
+  const response = await stub.fetch(new Request("http://do/stream"));
+
+  // Add CORS headers for SSE
+  const newHeaders = new Headers(response.headers);
+  newHeaders.set("Access-Control-Allow-Origin", "*");
+  newHeaders.set("Access-Control-Allow-Headers", "Content-Type");
+
+  return new Response(response.body, {
+    status: response.status,
+    headers: newHeaders,
+  });
 }

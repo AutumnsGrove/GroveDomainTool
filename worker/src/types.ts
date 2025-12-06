@@ -58,7 +58,8 @@ export type SearchStatus =
   | "running"
   | "complete"
   | "needs_followup"
-  | "failed";
+  | "failed"
+  | "cancelled";
 
 export interface SearchJob {
   id: string;
@@ -130,7 +131,7 @@ export interface GetResultsResponse {
   };
 }
 
-export interface FollowupQuizResponse {
+export interface GetFollowupQuizResponse {
   job_id: string;
   questions: QuizQuestion[];
   context: {

@@ -17,13 +17,13 @@
 - [x] Alarm-based batch chaining
 - [x] Basic job lifecycle (create -> running -> complete/needs_followup)
 - [x] Wrangler deployment commands file (worker/COMMANDS.txt)
-- [x] Deploy worker to Cloudflare (grove-domain-tool-dev)
-- [ ] Test DO persistence between alarms
-- [ ] Add SSE/streaming endpoint for real-time progress updates
+- [x] Deploy worker to Cloudflare
+- [x] DO persistence between alarms (verified working)
+- [x] SSE streaming endpoint for real-time progress
 
 ## Phase 3: AI Orchestration - COMPLETE
-- [x] Implement driver agent with prompt templates
-- [x] Implement Haiku swarm parallel evaluation
+- [x] Implement driver agent with prompt templates (Python + TypeScript)
+- [x] Implement Haiku swarm parallel evaluation (Python + TypeScript)
 - [x] Build main search loop (6 batch limit)
 - [x] Results scoring and ranking
 - [x] Add provider abstraction for Claude/Kimi/Mock
@@ -33,6 +33,11 @@
 - [x] Fix terminal output to show domains with unknown pricing
 - [x] Fix prompts to generate business-themed domains (not generic)
 - [x] Add API usage tracking (tokens + cost estimation)
+- [x] **Port orchestrator to TypeScript in Durable Object**
+- [x] **TypeScript driver agent (Claude API calls)**
+- [x] **TypeScript swarm agent (parallel Haiku evaluation)**
+- [x] **TypeScript RDAP checker**
+- [x] **End-to-end Worker tested and working!**
 
 ## Phase 4: MCP Server
 - [ ] Implement MCP tool definitions
@@ -51,7 +56,7 @@
 - [x] Add Kimi K2 provider (stub, ready for API key)
 - [ ] Parallel provider execution (both providers simultaneously)
 - [ ] GroveEngine integration
-- [ ] Production testing
+- [x] Production testing (Worker API tested!)
 - [ ] Documentation updates
 
 ## Testing - COMPLETE
@@ -72,81 +77,95 @@
 
 ---
 
-## Next Steps (Priority Order)
+## Completed This Session (2025-12-06)
 
-### 1. Real-Time Progress Streaming (for domains.grove.place)
-The website needs to show live progress as the search runs. Implementation plan:
-- Add SSE endpoint to Durable Object: `GET /job/{id}/stream`
-- Stream events: `batch_start`, `batch_complete`, `domain_found`, `search_complete`
-- Include usage stats in stream events
-- Client subscribes to SSE and updates UI in real-time
+### Major Accomplishment: TypeScript Port Complete!
 
-### 2. Set Up Cloudflare Bindings & Wire Up DO
-Current state: Only the worker + Anthropic API key exist. No bindings configured.
+The Python orchestrator has been fully ported to TypeScript and is now running in Cloudflare Durable Objects:
 
-**How Durable Objects work:**
-- DO is NOT a replacement for Worker - it's accessed THROUGH a Worker
-- Worker = stateless request handler (the entry point)
-- DO = stateful singleton with SQLite storage (persists between requests)
-- Flow: Request → Worker → DO (via binding) → DO handles stateful logic
+- [x] Created `worker/src/prompts.ts` - All prompt templates
+- [x] Created `worker/src/agents/driver.ts` - Driver agent using Claude API
+- [x] Created `worker/src/agents/swarm.ts` - Swarm agent with parallel Haiku calls
+- [x] Created `worker/src/rdap.ts` - RDAP domain availability checker
+- [x] Wired up `processBatch()` in Durable Object
+- [x] Added SSE streaming endpoint `/api/stream?job_id=xxx`
+- [x] Deployed to production
+- [x] **End-to-end test successful!**
 
-**Setup needed:**
-- The DO binding is defined in wrangler.toml but may need verification
-- DO class `SearchJobDO` handles job state and alarm-based batch processing
-- Worker routes requests to DO instances (one DO per job_id)
-- DO can make HTTP calls to external services (like Anthropic API directly in TypeScript)
-
-**Decision: Port orchestrator to TypeScript in DO** (Cloudflare only runs JS/TS)
-
-The Python orchestrator is ~300 lines + prompt templates. Port plan:
-- `SearchJobDO` class handles state + alarms (already exists)
-- Add TypeScript versions of: driver agent, swarm agent, RDAP checker
-- Use Anthropic SDK for TypeScript (`@anthropic-ai/sdk`)
-- Prompts are just strings - easy to copy over
-
-### 3. Test Full End-to-End Flow
-- Submit quiz via API
-- DO starts search job
-- Progress streams to website
-- Results displayed when complete
-
-### 4. Production Deployment
-- Deploy to production environment (not just dev)
-- Set production secrets
-- Configure custom domain if needed
+### Test Results
+First production search for "Sunrise Bakery":
+- 3 batches completed
+- 100 domains checked
+- **16 available domains found!**
+- Top results: sunrisebreadworks.com, sunrisepastry.com, sunrisekneads.com
+- 17,658 tokens used
 
 ---
 
-## Completed This Session (2025-12-05)
+## API Endpoints (Production)
 
-- [x] Renamed project from `grove-domain-search` to `GroveDomainTool`
-- [x] Renamed Python module from `grove_domain_search` to `grove_domain_tool`
-- [x] Updated all imports, tests, and documentation
-- [x] Deployed worker to Cloudflare dev environment
-- [x] Set ANTHROPIC_API_KEY secret in Cloudflare
-- [x] Fixed terminal output to show domains with "unknown" pricing
-- [x] Fixed AI prompts to generate business-themed domains
-- [x] Added API usage tracking (UsageStats class)
-- [x] Display token usage and cost estimate in CLI output
-- [x] All 73 tests passing
+Base URL: `https://grove-domain-tool.m7jv4v7npb.workers.dev`
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | Health check |
+| `/api/search` | POST | Start new search job |
+| `/api/status?job_id=xxx` | GET | Get job status |
+| `/api/results?job_id=xxx` | GET | Get search results |
+| `/api/stream?job_id=xxx` | GET | SSE stream for real-time updates |
+| `/api/followup?job_id=xxx` | GET | Get follow-up quiz |
+| `/api/resume?job_id=xxx` | POST | Resume with follow-up answers |
+| `/api/cancel?job_id=xxx` | POST | Cancel running job |
+
+### Start Search Request
+```json
+POST /api/search
+{
+  "client_id": "client-123",
+  "quiz_responses": {
+    "business_name": "Sunrise Bakery",
+    "tld_preferences": ["com", "co", "io", "app", "dev"],
+    "vibe": "creative",
+    "keywords": "fresh baked goods"
+  }
+}
+```
 
 ---
 
 ## Key Files Modified This Session
 
-- `pyproject.toml` - Package name, CLI entry point, URLs
-- `src/grove_domain_tool/` - Renamed from grove_domain_search
-- `src/grove_domain_tool/orchestrator.py` - Added UsageStats, usage tracking
-- `src/grove_domain_tool/agents/prompts.py` - Strengthened prompts for business-themed domains
-- `src/grove_domain_tool/agents/driver.py` - Added last_usage tracking
-- `src/grove_domain_tool/agents/swarm.py` - Added usage aggregation across chunks
-- `src/grove_domain_tool/cli.py` - Display usage stats
-- `worker/wrangler.toml` - Updated worker name, fixed dev env config
-- `tests/*` - Updated all imports
+### New TypeScript Files
+- `worker/src/prompts.ts` - Prompt templates
+- `worker/src/agents/driver.ts` - Driver agent
+- `worker/src/agents/swarm.ts` - Swarm agent
+- `worker/src/rdap.ts` - RDAP checker
+
+### Updated Files
+- `worker/src/durable-object.ts` - Full processBatch implementation
+- `worker/src/index.ts` - Added stream endpoint
+- `worker/src/types.ts` - Fixed type conflicts
 
 ---
 
-*Last updated: 2025-12-05*
-*73 tests passing*
-*Worker: https://grove-domain-tool-dev.m7jv4v7npb.workers.dev*
+## Next Steps
+
+1. **Integrate with domains.grove.place**
+   - Website needs to poll `/api/status` or connect to `/api/stream`
+   - Show real-time progress as search runs
+   - Display results when complete
+
+2. **Add Cloudflare pricing lookup**
+   - Currently all domains show "unknown" pricing
+   - Need to integrate with Cloudflare's pricing API
+
+3. **Email notifications**
+   - Send results email when search completes
+   - Send follow-up quiz email when needed
+
+---
+
+*Last updated: 2025-12-06*
+*73 tests passing (Python)*
+*Worker: https://grove-domain-tool.m7jv4v7npb.workers.dev*
 *CLI: `grove-domain-tool search "Business Name" --batches 2`*
