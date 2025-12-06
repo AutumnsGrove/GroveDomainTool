@@ -227,7 +227,7 @@ Added support for 4 AI providers with proper tool/function calling:
 ## Remaining Work
 
 ### High Priority
-- [ ] Email notifications (Resend integration ready, just needs wiring)
+- [x] Email notifications (Resend integration wired up!)
 - [ ] Add AI Model selector to frontend Searcher page
 
 ### Nice to Have
