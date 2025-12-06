@@ -56,6 +56,7 @@ export interface InitialQuizResponse {
   tld_preferences: string[];
   vibe: string;
   keywords?: string;
+  client_email?: string; // Optional: if provided, emails will be sent on completion
 }
 
 export interface FollowupQuizResponse {

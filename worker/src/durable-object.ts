@@ -20,6 +20,7 @@ import { evaluateDomains, filterWorthChecking, type DomainEvaluation } from "./a
 import { checkDomainsParallel, type DomainCheckResult } from "./rdap";
 import { getBatchPricing, type DomainPrice } from "./pricing";
 import { getProvider, type ProviderName } from "./providers";
+import { sendResultsEmail, sendFollowupEmail } from "./email";
 
 export class SearchJobDO implements DurableObject {
   private state: DurableObjectState;
@@ -170,10 +171,16 @@ export class SearchJobDO implements DurableObject {
         // Success!
         this.updateJobStatus("complete");
         console.log(`Search complete with ${goodResults} good results`);
+
+        // Send results email if client_email is provided
+        await this.sendCompletionEmail(updatedJob);
       } else if (updatedJob.batch_num >= maxBatches) {
         // Need follow-up
         this.updateJobStatus("needs_followup");
         console.log(`Max batches reached, needs follow-up`);
+
+        // Send follow-up email if client_email is provided
+        await this.sendFollowupQuizEmail(updatedJob);
       } else {
         // Schedule next batch (10 second delay between batches)
         await this.scheduleAlarm(10 * 1000);
@@ -905,5 +912,83 @@ export class SearchJobDO implements DurableObject {
     }
 
     return patterns.join("; ") || "Various patterns all taken";
+  }
+
+  // ============================================================================
+  // Email methods
+  // ============================================================================
+
+  /**
+   * Send completion email with results
+   */
+  private async sendCompletionEmail(job: SearchJob): Promise<void> {
+    const clientEmail = job.quiz_responses.client_email;
+    if (!clientEmail || !this.env.RESEND_API_KEY) {
+      console.log("Skipping results email: no client_email or RESEND_API_KEY");
+      return;
+    }
+
+    try {
+      // Get top available domains
+      const domains = this.sql.exec(
+        `SELECT * FROM domain_results
+         WHERE status = 'available'
+         ORDER BY score DESC, price_cents ASC NULLS LAST
+         LIMIT 20`
+      ).toArray() as unknown as DomainResult[];
+
+      // Format domains for email
+      const formattedDomains = domains.map(d => ({
+        ...d,
+        flags: typeof d.flags === "string" ? JSON.parse(d.flags) : d.flags,
+      }));
+
+      // Build URLs
+      const baseUrl = "https://domains.grove.place";
+      const resultsUrl = `${baseUrl}/results/${job.id}`;
+      const bookingUrl = `${baseUrl}/booking`;
+
+      await sendResultsEmail(this.env.RESEND_API_KEY, {
+        client_email: clientEmail,
+        business_name: job.quiz_responses.business_name,
+        domains: formattedDomains,
+        results_url: resultsUrl,
+        booking_url: bookingUrl,
+      });
+
+      console.log(`Sent results email to ${clientEmail}`);
+    } catch (error) {
+      console.error("Failed to send results email:", error);
+      // Don't fail the job if email fails
+    }
+  }
+
+  /**
+   * Send follow-up quiz email
+   */
+  private async sendFollowupQuizEmail(job: SearchJob): Promise<void> {
+    const clientEmail = job.quiz_responses.client_email;
+    if (!clientEmail || !this.env.RESEND_API_KEY) {
+      console.log("Skipping follow-up email: no client_email or RESEND_API_KEY");
+      return;
+    }
+
+    try {
+      const baseUrl = "https://domains.grove.place";
+      const quizUrl = `${baseUrl}/followup/${job.id}`;
+
+      await sendFollowupEmail(this.env.RESEND_API_KEY, {
+        client_email: clientEmail,
+        business_name: job.quiz_responses.business_name,
+        quiz_url: quizUrl,
+        batches_completed: job.batch_num,
+        domains_checked: this.getTotalDomainsChecked(),
+      });
+
+      console.log(`Sent follow-up email to ${clientEmail}`);
+    } catch (error) {
+      console.error("Failed to send follow-up email:", error);
+      // Don't fail the job if email fails
+    }
   }
 }
