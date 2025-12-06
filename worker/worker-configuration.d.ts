@@ -4,8 +4,8 @@ interface Env {
 	ENVIRONMENT: "production" | "development";
 	MAX_BATCHES: "6" | "2";
 	TARGET_RESULTS: "25";
-	DRIVER_PROVIDER: "claude";
-	SWARM_PROVIDER: "claude";
+	DRIVER_PROVIDER: "claude" | "deepseek";
+	SWARM_PROVIDER: "claude" | "deepseek";
 	SEARCH_JOB: DurableObjectNamespace<import("./src/index").SearchJobDO>;
 	AI: Ai;
 }

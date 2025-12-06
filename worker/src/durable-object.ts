@@ -49,6 +49,8 @@ export class SearchJobDO implements DurableObject {
         batch_num INTEGER DEFAULT 0,
         quiz_responses TEXT NOT NULL,
         followup_responses TEXT,
+        driver_provider TEXT,
+        swarm_provider TEXT,
         created_at TEXT DEFAULT (datetime('now')),
         updated_at TEXT DEFAULT (datetime('now')),
         error TEXT,
@@ -190,6 +192,8 @@ export class SearchJobDO implements DurableObject {
       job_id: string;
       client_id: string;
       quiz_responses: InitialQuizResponse;
+      driver_provider?: string;
+      swarm_provider?: string;
     };
 
     // Check if job already exists
@@ -201,13 +205,15 @@ export class SearchJobDO implements DurableObject {
       );
     }
 
-    // Create job
+    // Create job with optional provider overrides
     this.sql.exec(
-      `INSERT INTO search_job (id, client_id, status, quiz_responses)
-       VALUES (?, ?, 'running', ?)`,
+      `INSERT INTO search_job (id, client_id, status, quiz_responses, driver_provider, swarm_provider)
+       VALUES (?, ?, 'running', ?, ?, ?)`,
       body.job_id,
       body.client_id,
-      JSON.stringify(body.quiz_responses)
+      JSON.stringify(body.quiz_responses),
+      body.driver_provider ?? null,
+      body.swarm_provider ?? null
     );
 
     // Start first batch immediately via alarm
@@ -472,6 +478,8 @@ export class SearchJobDO implements DurableObject {
       batch_num: number;
       quiz_responses: string;
       followup_responses: string | null;
+      driver_provider: string | null;
+      swarm_provider: string | null;
       created_at: string;
       updated_at: string;
       error: string | null;
@@ -491,6 +499,8 @@ export class SearchJobDO implements DurableObject {
       followup_responses: row.followup_responses
         ? JSON.parse(row.followup_responses)
         : undefined,
+      driver_provider: row.driver_provider ?? undefined,
+      swarm_provider: row.swarm_provider ?? undefined,
       created_at: row.created_at,
       updated_at: row.updated_at,
       error: row.error ?? undefined,
@@ -660,9 +670,9 @@ export class SearchJobDO implements DurableObject {
     const batchNum = this.incrementBatchNum();
     const startTime = Date.now();
 
-    // Create providers based on configuration
-    const driverProviderName = (this.env.DRIVER_PROVIDER || "claude") as ProviderName;
-    const swarmProviderName = (this.env.SWARM_PROVIDER || "claude") as ProviderName;
+    // Create providers based on job-level settings (from API) or env defaults
+    const driverProviderName = (job.driver_provider || this.env.DRIVER_PROVIDER || "claude") as ProviderName;
+    const swarmProviderName = (job.swarm_provider || this.env.SWARM_PROVIDER || "claude") as ProviderName;
 
     const driverProvider = getProvider(driverProviderName, this.env);
     const swarmProvider = getProvider(swarmProviderName, this.env);

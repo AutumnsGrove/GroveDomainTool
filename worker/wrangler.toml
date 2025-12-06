@@ -45,8 +45,8 @@ new_sqlite_classes = ["SearchJobDO"]
 ENVIRONMENT = "development"
 MAX_BATCHES = "2"
 TARGET_RESULTS = "25"
-DRIVER_PROVIDER = "claude"
-SWARM_PROVIDER = "claude"
+DRIVER_PROVIDER = "deepseek"
+SWARM_PROVIDER = "deepseek"
 
 # Secrets to configure:
 # - ANTHROPIC_API_KEY: API key for Claude (required if using claude provider)

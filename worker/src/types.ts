@@ -81,6 +81,8 @@ export interface SearchJob {
   batch_num: number;
   quiz_responses: InitialQuizResponse;
   followup_responses?: FollowupQuizResponse;
+  driver_provider?: string; // Override for this job (claude | deepseek | kimi | cloudflare)
+  swarm_provider?: string; // Override for this job (claude | deepseek | kimi | cloudflare)
   created_at: string;
   updated_at: string;
   error?: string;
@@ -114,6 +116,8 @@ export interface SearchArtifact {
 export interface StartSearchRequest {
   client_id: string;
   quiz_responses: InitialQuizResponse;
+  driver_provider?: string; // claude | deepseek | kimi | cloudflare
+  swarm_provider?: string; // claude | deepseek | kimi | cloudflare
 }
 
 export interface StartSearchResponse {
