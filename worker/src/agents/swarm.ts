@@ -300,16 +300,43 @@ export function quickEvaluate(domain: string): DomainEvaluation {
   // Length-based scoring
   const lengthScore = name.length <= 8 ? 1.0 : Math.max(0.3, 1.0 - (name.length - 8) * 0.1);
 
-  // TLD scoring
+  // TLD scoring - expanded for diverse TLD options
   const tldScores: Record<string, number> = {
+    // Classic (highest trust)
     com: 1.0,
+    net: 0.7,
+    org: 0.7,
+    // Business
     co: 0.9,
+    biz: 0.6,
+    company: 0.65,
+    agency: 0.7,
+    consulting: 0.65,
+    // Tech
     io: 0.85,
     dev: 0.8,
     app: 0.8,
+    tech: 0.75,
+    ai: 0.8,
+    software: 0.65,
+    // Creative
+    design: 0.75,
+    studio: 0.75,
+    space: 0.7,
+    art: 0.7,
+    gallery: 0.65,
+    // Nature
+    garden: 0.7,
+    earth: 0.7,
+    green: 0.65,
+    place: 0.7,
+    life: 0.7,
+    land: 0.65,
+    // Personal
     me: 0.75,
-    net: 0.7,
-    org: 0.7,
+    name: 0.6,
+    blog: 0.65,
+    page: 0.65,
   };
   const tldScore = tldScores[tld] || 0.5;
 

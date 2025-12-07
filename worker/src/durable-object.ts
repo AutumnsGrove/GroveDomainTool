@@ -442,6 +442,7 @@ export class SearchJobDO implements DurableObject {
 
   /**
    * SSE stream for real-time progress updates
+   * Includes recent domains and domain_idea status for live streaming
    */
   private handleStream(): Response {
     const job = this.getJob();
@@ -457,6 +458,16 @@ export class SearchJobDO implements DurableObject {
     const goodResults = this.getGoodResultsCount();
     const availableDomains = this.getAvailableDomainsCount();
 
+    // Get recent available domains for streaming effect
+    const recentDomains = this.getRecentAvailableDomains(10);
+
+    // Check domain_idea status if provided
+    let domainIdeaStatus = null;
+    const quiz = job.quiz_responses;
+    if (quiz.domain_idea) {
+      domainIdeaStatus = this.getDomainIdeaStatus(quiz.domain_idea);
+    }
+
     const data = JSON.stringify({
       event: "status",
       job_id: job.id,
@@ -465,6 +476,8 @@ export class SearchJobDO implements DurableObject {
       domains_checked: domainsChecked,
       domains_available: availableDomains,
       good_results: goodResults,
+      recent_domains: recentDomains,
+      domain_idea_status: domainIdeaStatus,
     });
 
     return new Response(`data: ${data}\n\n`, {
@@ -600,6 +613,63 @@ export class SearchJobDO implements DurableObject {
     return results.map(r => r.domain);
   }
 
+  /**
+   * Get recent available domains for live streaming effect
+   */
+  private getRecentAvailableDomains(limit: number = 10): DomainResult[] {
+    const results = this.sql.exec<{
+      id: number;
+      batch_num: number;
+      domain: string;
+      tld: string;
+      status: string;
+      price_cents: number | null;
+      score: number;
+      flags: string;
+      evaluation_data: string | null;
+      created_at: string;
+    }>(
+      `SELECT * FROM domain_results
+       WHERE status = 'available'
+       ORDER BY id DESC
+       LIMIT ?`,
+      limit
+    ).toArray();
+
+    return results.map(r => ({
+      id: r.id,
+      batch_num: r.batch_num,
+      domain: r.domain,
+      tld: r.tld,
+      status: r.status as "available" | "registered" | "unknown",
+      price_cents: r.price_cents ?? undefined,
+      score: r.score,
+      flags: r.flags ? JSON.parse(r.flags) : [],
+      evaluation_data: r.evaluation_data ? JSON.parse(r.evaluation_data) : undefined,
+      created_at: r.created_at,
+    }));
+  }
+
+  /**
+   * Check if user's domain idea has been checked and its availability
+   */
+  private getDomainIdeaStatus(domainIdea: string): { available: boolean; checked: boolean; price_cents?: number } {
+    const results = this.sql.exec<{ status: string; price_cents: number | null }>(
+      "SELECT status, price_cents FROM domain_results WHERE LOWER(domain) = ? LIMIT 1",
+      domainIdea.toLowerCase()
+    ).toArray();
+
+    if (results.length === 0) {
+      return { available: false, checked: false };
+    }
+
+    return {
+      available: results[0].status === "available",
+      checked: true,
+      price_cents: results[0].price_cents ?? undefined,
+    };
+  }
+
   private getPricingSummary(): Record<string, number> {
     const rows = this.sql.exec<{ category: string; count: number }>(`
       SELECT
@@ -717,6 +787,7 @@ export class SearchJobDO implements DurableObject {
       maxBatches,
       domainIdea: quiz.domain_idea,
       keywords: quiz.keywords,
+      diverseTlds: quiz.diverse_tlds,
       previousResults,
     });
 

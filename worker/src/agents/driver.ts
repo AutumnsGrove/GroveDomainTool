@@ -32,6 +32,7 @@ export interface DriverOptions {
   maxBatches?: number;
   domainIdea?: string;
   keywords?: string;
+  diverseTlds?: boolean;
   previousResults?: PreviousResults;
 }
 
@@ -52,6 +53,7 @@ export async function generateCandidates(
     maxBatches: options.maxBatches || 6,
     domainIdea: options.domainIdea,
     keywords: options.keywords,
+    diverseTlds: options.diverseTlds,
     previousResults: options.previousResults,
   });
 

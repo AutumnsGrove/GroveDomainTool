@@ -59,6 +59,7 @@ export interface InitialQuizResponse {
   tld_preferences: string[];
   vibe: string;
   keywords?: string;
+  diverse_tlds?: boolean; // Encourage variety in TLD suggestions
   client_email?: string; // Optional: if provided, emails will be sent on completion
 }
 

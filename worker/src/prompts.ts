@@ -20,7 +20,7 @@ Key principles:
 3. **Brand fit**: Names should match the client's stated vibe (professional, creative, minimal, bold, personal).
 4. **Practical**: Names should be easy to spell, pronounce, and remember. Avoid hyphens and numbers.
 5. **Diverse**: Suggest a mix of direct names, creative variations, and unexpected options - BUT all related to the business name.
-6. **TLD strategy**: .com is king but .co, .io, .dev, .app, .me are strong alternatives.
+6. **TLD strategy**: .com remains the gold standard, but modern alternatives like .co, .io, .dev, .app, and .me are excellent for tech brands. Consider creative TLDs (.design, .studio, .space) and nature-themed ones (.garden, .earth, .place, .life) when they fit the brand personality.
 
 When given previous results, learn from them:
 - Avoid repeating domains already checked
@@ -184,6 +184,7 @@ export interface DriverPromptOptions {
   maxBatches?: number;
   domainIdea?: string;
   keywords?: string;
+  diverseTlds?: boolean;
   previousResults?: PreviousResults;
 }
 
@@ -200,6 +201,7 @@ export function formatDriverPrompt(options: DriverPromptOptions): string {
     maxBatches = 6,
     domainIdea,
     keywords,
+    diverseTlds,
     previousResults,
   } = options;
 
@@ -235,7 +237,7 @@ export function formatDriverPrompt(options: DriverPromptOptions): string {
   // Batch guidelines
   const batchGuidelines = BATCH_GUIDELINES[batchNum] || BATCH_GUIDELINES[6];
 
-  return DRIVER_GENERATE_PROMPT
+  let prompt = DRIVER_GENERATE_PROMPT
     .replace("{count}", String(count))
     .replace(/{business_name}/g, businessName)
     .replace("{domain_idea_section}", domainIdeaSection)
@@ -246,6 +248,23 @@ export function formatDriverPrompt(options: DriverPromptOptions): string {
     .replace("{max_batches}", String(maxBatches))
     .replace("{previous_results_section}", previousResultsSection)
     .replace("{batch_guidelines}", batchGuidelines);
+
+  // Add diverse TLD instructions if enabled
+  if (diverseTlds) {
+    prompt += `
+
+**TLD Diversity Requested**: The client wants variety in TLD suggestions. For this batch:
+- Include at least 3-4 different TLDs in your suggestions
+- Don't use the same TLD for more than 30% of domains
+- Mix traditional TLDs (.com, .co) with creative options (.design, .studio, .space, .garden)
+- Consider TLDs that match the brand vibe:
+  - Tech vibes: .io, .dev, .ai, .app, .tech
+  - Creative vibes: .design, .studio, .space, .art
+  - Nature/organic vibes: .earth, .garden, .green, .place, .life
+  - Personal brands: .me, .blog, .page`;
+  }
+
+  return prompt;
 }
 
 export interface SwarmPromptOptions {
