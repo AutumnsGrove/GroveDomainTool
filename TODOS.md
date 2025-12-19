@@ -291,3 +291,43 @@ All core features are implemented, tested, and deployed:
 *Worker: https://forage.grove.place*
 *Frontend: https://forage.grove.place*
 *CLI: `forage search "Business Name" --batches 2`*
+
+---
+
+## 🎯 Project Rename: Acorn → Forage (December 2025)
+
+### ✅ Completed
+- [x] Renamed project from "GroveDomainTool" to "Forage"
+- [x] Updated package name: `grove-domain-tool` → `forage`
+- [x] Renamed Python module: `src/grove_domain_tool` → `src/forage`
+- [x] Updated CLI command: `grove-domain-tool` → `forage`
+- [x] Updated worker name and deployed: `forage.m7jv4v7npb.workers.dev`
+- [x] Updated all documentation (README, SPEC, this file)
+- [x] Updated all test imports and references
+- [x] Updated worker TypeScript files with new branding
+- [x] Updated GroveAuth OAuth client with `forage.grove.place` domain
+- [x] Updated GroveEngine frontend with Forage branding
+- [x] Updated autumnsgrove README with Forage
+- [x] All changes committed and pushed to GitHub
+
+### 🔧 Remaining Work
+- [ ] **Fix GroveEngine domains build errors** (blocking deployment)
+  - Issue: `@autumnsgrove/groveengine/services` import resolution
+  - Status: Running `pnpm install --force` to rebuild workspace
+- [ ] **Deploy GroveEngine domains frontend** to Cloudflare Pages
+  - Once build is fixed, auto-deployment will trigger
+- [ ] **Test forage.grove.place** end-to-end
+  - Verify frontend loads correctly
+  - Test domain search functionality
+  - Confirm worker API integration
+- [ ] **Clean up old worker** (optional)
+  - Delete `grove-domain-tool` worker from Cloudflare
+  - Command: `pnpm exec wrangler delete grove-domain-tool`
+
+### 📝 Notes
+- Worker API: `https://forage.m7jv4v7npb.workers.dev` ✅ Working
+- Frontend domain: `forage.grove.place` (pending deployment)
+- Auth configured: OAuth redirects and CORS ✅
+- GitHub repo: Consider renaming `AutumnsGrove/GroveDomainTool` → `AutumnsGrove/Forage`
+
+*Last updated: 2025-12-19*
