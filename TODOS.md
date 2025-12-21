@@ -311,11 +311,14 @@ All core features are implemented, tested, and deployed:
 - [x] All changes committed and pushed to GitHub
 
 ### 🔧 Remaining Work
-- [ ] **Fix GroveEngine domains build errors** (blocking deployment)
+- [x] **Fix GroveEngine domains build errors** ✅ FIXED (2025-12-21)
   - Issue: `@autumnsgrove/groveengine/services` import resolution
-  - Status: Running `pnpm install --force` to rebuild workspace
-- [ ] **Deploy GroveEngine domains frontend** to Cloudflare Pages
-  - Once build is fixed, auto-deployment will trigger
+  - Solution: Added `@autumnsgrove/groveengine` as workspace dependency in domains/package.json
+  - Commit: 74d765d
+- [x] **Deploy GroveEngine domains frontend** ✅ DEPLOYED (2025-12-21)
+  - Deployed to Cloudflare Pages project "forage"
+  - Production URL: https://grove-domains.pages.dev
+  - Custom domains: forage.grove.place, domains.grove.place (via grove-router)
 - [ ] **Test forage.grove.place** end-to-end
   - Verify frontend loads correctly
   - Test domain search functionality
@@ -326,8 +329,9 @@ All core features are implemented, tested, and deployed:
 
 ### 📝 Notes
 - Worker API: `https://forage.m7jv4v7npb.workers.dev` ✅ Working
-- Frontend domain: `forage.grove.place` (pending deployment)
+- Frontend domains: `forage.grove.place` and `domains.grove.place` ✅ Deployed
+- Pages.dev URL: `https://grove-domains.pages.dev` ✅ Live
 - Auth configured: OAuth redirects and CORS ✅
 - GitHub repo: Consider renaming `AutumnsGrove/GroveDomainTool` → `AutumnsGrove/Forage`
 
-*Last updated: 2025-12-19*
+*Last updated: 2025-12-21*
