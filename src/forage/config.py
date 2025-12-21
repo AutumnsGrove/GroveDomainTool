@@ -39,26 +39,22 @@ class PricingConfig:
 @dataclass
 class ModelConfig:
     """AI model selection"""
-    driver_provider: Literal["claude", "kimi", "deepseek", "cloudflare"] = os.getenv("DRIVER_PROVIDER", "claude")
+    driver_provider: Literal["deepseek", "openrouter"] = os.getenv("DRIVER_PROVIDER", "openrouter")
     driver_model: str = os.getenv("DRIVER_MODEL", "")  # Empty = use provider default
-    swarm_provider: Literal["claude", "kimi", "deepseek", "cloudflare"] = os.getenv("SWARM_PROVIDER", "claude")
+    swarm_provider: Literal["deepseek", "openrouter"] = os.getenv("SWARM_PROVIDER", "openrouter")
     swarm_model: str = os.getenv("SWARM_MODEL", "")  # Empty = use provider default
     parallel_providers: bool = os.getenv("PARALLEL_PROVIDERS", "false").lower() == "true"
 
     # Default models per provider
     PROVIDER_DEFAULTS = {
-        "claude": "claude-sonnet-4-20250514",
-        "kimi": "kimi-k2-0528",
         "deepseek": "deepseek-chat",
-        "cloudflare": "@cf/meta/llama-4-scout-17b-16e-instruct",
+        "openrouter": "deepseek/deepseek-chat",
     }
 
     # Cost per 1M tokens (input, output) in USD
     PROVIDER_COSTS = {
-        "claude": {"input": 3.00, "output": 15.00},
-        "kimi": {"input": 0.60, "output": 2.50},
         "deepseek": {"input": 0.28, "output": 0.42},
-        "cloudflare": {"input": 0.27, "output": 0.85},
+        "openrouter": {"input": 0.28, "output": 0.42},  # Same as DeepSeek via OpenRouter
     }
 
     def get_driver_model(self) -> str:
@@ -98,10 +94,11 @@ class Config:
 
     @classmethod
     def cheap_mode(cls) -> "Config":
-        """Minimize AI costs — fewer candidates, Haiku only"""
+        """Minimize AI costs — fewer candidates, use DeepSeek via OpenRouter"""
         cfg = cls()
         cfg.search.candidates_per_batch = 25
-        cfg.models.driver_model = "claude-haiku-3-20240307"
+        cfg.models.driver_provider = "openrouter"
+        cfg.models.driver_model = "deepseek/deepseek-chat"
         return cfg
 
 

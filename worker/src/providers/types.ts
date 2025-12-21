@@ -58,7 +58,7 @@ export interface AIProvider {
   generateWithTools(options: GenerateWithToolsOptions): Promise<ProviderResponse>;
 }
 
-export type ProviderName = "claude" | "kimi" | "deepseek" | "cloudflare";
+export type ProviderName = "deepseek" | "openrouter";
 
 export interface ProviderConfig {
   name: ProviderName;

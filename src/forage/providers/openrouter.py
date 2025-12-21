@@ -1,7 +1,8 @@
 """
-Kimi (Moonshot) provider implementation
+OpenRouter provider implementation
 
-Kimi K2 uses an OpenAI-compatible API with tool calling support.
+OpenRouter uses an OpenAI-compatible API with zero data retention.
+Supports many models including DeepSeek, Cerebras, etc.
 """
 
 import os
@@ -15,49 +16,53 @@ from .base import (
 from .tools import tools_to_openai
 
 
-class KimiProvider(ModelProvider):
+class OpenRouterProvider(ModelProvider):
     """
-    Moonshot Kimi provider.
+    OpenRouter provider.
 
     Uses OpenAI-compatible API. API key is read from:
     1. Constructor argument
-    2. KIMI_API_KEY environment variable
+    2. OPENROUTER_API_KEY environment variable
     """
 
-    # Kimi API base URL
-    BASE_URL = "https://api.moonshot.cn/v1"
+    # OpenRouter API base URL
+    BASE_URL = "https://openrouter.ai/api/v1"
 
     def __init__(
         self,
         api_key: Optional[str] = None,
-        default_model: str = "kimi-k2-0528",
+        default_model: str = "deepseek/deepseek-chat",
         base_url: Optional[str] = None,
     ):
         """
-        Initialize Kimi provider.
+        Initialize OpenRouter provider.
 
         Args:
-            api_key: Moonshot API key (falls back to env var)
-            default_model: Default model to use
-            base_url: API base URL (defaults to Moonshot's API)
+            api_key: OpenRouter API key (falls back to env var)
+            default_model: Default model to use (deepseek/deepseek-chat for V3.2)
+            base_url: API base URL (defaults to OpenRouter's API)
         """
-        self._api_key = api_key or os.getenv("KIMI_API_KEY")
+        self._api_key = api_key or os.getenv("OPENROUTER_API_KEY")
         self._default_model = default_model
         self._base_url = base_url or self.BASE_URL
         self._client = None
 
     def _get_client(self):
-        """Lazy initialization of OpenAI client for Kimi."""
+        """Lazy initialization of OpenAI client for OpenRouter."""
         if self._client is None:
             if not self._api_key:
                 raise AuthenticationError(
-                    "No Kimi API key provided. Set KIMI_API_KEY or pass api_key to constructor."
+                    "No OpenRouter API key provided. Set OPENROUTER_API_KEY or pass api_key to constructor."
                 )
             try:
                 from openai import AsyncOpenAI
                 self._client = AsyncOpenAI(
                     api_key=self._api_key,
                     base_url=self._base_url,
+                    default_headers={
+                        "HTTP-Referer": "https://forage.grove.place",
+                        "X-Title": "Forage Domain Search",
+                    }
                 )
             except ImportError:
                 raise ProviderError("openai package not installed. Run: pip install openai")
@@ -65,7 +70,7 @@ class KimiProvider(ModelProvider):
 
     @property
     def name(self) -> str:
-        return "kimi"
+        return "openrouter"
 
     @property
     def default_model(self) -> str:
@@ -85,18 +90,16 @@ class KimiProvider(ModelProvider):
         temperature: float = 0.7,
         **kwargs
     ) -> ModelResponse:
-        """Generate a response using Kimi."""
+        """Generate a response using OpenRouter."""
         client = self._get_client()
         model = model or self._default_model
 
         try:
-            # Build messages
             messages = []
             if system:
                 messages.append({"role": "system", "content": system})
             messages.append({"role": "user", "content": prompt})
 
-            # Make the API call
             response = await client.chat.completions.create(
                 model=model,
                 messages=messages,
@@ -104,12 +107,10 @@ class KimiProvider(ModelProvider):
                 temperature=temperature,
             )
 
-            # Extract content
             content = ""
             if response.choices and response.choices[0].message:
                 content = response.choices[0].message.content or ""
 
-            # Extract usage
             usage = {}
             if response.usage:
                 usage = {
@@ -128,16 +129,13 @@ class KimiProvider(ModelProvider):
         except Exception as e:
             error_str = str(e).lower()
 
-            # Handle rate limiting
             if "rate" in error_str or "429" in error_str:
-                raise RateLimitError(f"Kimi rate limit exceeded: {e}")
+                raise RateLimitError(f"OpenRouter rate limit exceeded: {e}")
 
-            # Handle auth errors
             if "auth" in error_str or "401" in error_str or "api key" in error_str:
-                raise AuthenticationError(f"Kimi authentication failed: {e}")
+                raise AuthenticationError(f"OpenRouter authentication failed: {e}")
 
-            # Generic error
-            raise ProviderError(f"Kimi API error: {e}")
+            raise ProviderError(f"OpenRouter API error: {e}")
 
     async def generate_with_tools(
         self,
@@ -151,7 +149,7 @@ class KimiProvider(ModelProvider):
         tool_choice: Optional[str] = None,
         **kwargs
     ) -> ModelResponse:
-        """Generate a response using Kimi with tool calling."""
+        """Generate a response using OpenRouter with tool calling."""
         client = self._get_client()
         model = model or self._default_model
 
@@ -180,7 +178,6 @@ class KimiProvider(ModelProvider):
 
             response = await client.chat.completions.create(**request_kwargs)
 
-            # Extract content and tool calls
             content = ""
             tool_calls = []
 
@@ -221,9 +218,9 @@ class KimiProvider(ModelProvider):
             error_str = str(e).lower()
 
             if "rate" in error_str or "429" in error_str:
-                raise RateLimitError(f"Kimi rate limit exceeded: {e}")
+                raise RateLimitError(f"OpenRouter rate limit exceeded: {e}")
 
             if "auth" in error_str or "401" in error_str or "api key" in error_str:
-                raise AuthenticationError(f"Kimi authentication failed: {e}")
+                raise AuthenticationError(f"OpenRouter authentication failed: {e}")
 
-            raise ProviderError(f"Kimi API error: {e}")
+            raise ProviderError(f"OpenRouter API error: {e}")

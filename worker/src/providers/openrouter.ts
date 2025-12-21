@@ -1,6 +1,6 @@
 /**
- * Kimi (Moonshot) provider for Cloudflare Workers
- * Uses OpenAI-compatible API
+ * OpenRouter provider for Cloudflare Workers
+ * Uses OpenAI-compatible API with zero data retention
  */
 
 import type { Env } from "../types";
@@ -13,20 +13,20 @@ import type {
 } from "./types";
 import { toOpenAITool } from "./tools";
 
-const KIMI_API_URL = "https://api.moonshot.cn/v1/chat/completions";
+const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 
-export class KimiProvider implements AIProvider {
-  readonly name = "kimi";
-  readonly defaultModel = "kimi-k2-0528";
+export class OpenRouterProvider implements AIProvider {
+  readonly name = "openrouter";
+  readonly defaultModel = "deepseek/deepseek-chat";
   readonly supportsTools = true;
 
   private apiKey: string;
   private model: string;
 
   constructor(env: Env, model?: string) {
-    const apiKey = env.KIMI_API_KEY;
+    const apiKey = env.OPENROUTER_API_KEY;
     if (!apiKey) {
-      throw new Error("KIMI_API_KEY not configured");
+      throw new Error("OPENROUTER_API_KEY not configured");
     }
     this.apiKey = apiKey;
     this.model = model || this.defaultModel;
@@ -42,11 +42,13 @@ export class KimiProvider implements AIProvider {
     }
     messages.push({ role: "user", content: prompt });
 
-    const response = await fetch(KIMI_API_URL, {
+    const response = await fetch(OPENROUTER_API_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${this.apiKey}`,
+        "Authorization": `Bearer ${this.apiKey}`,
+        "HTTP-Referer": "https://forage.grove.place",
+        "X-Title": "Forage Domain Search",
       },
       body: JSON.stringify({
         model,
@@ -58,7 +60,7 @@ export class KimiProvider implements AIProvider {
 
     if (!response.ok) {
       const error = await response.text();
-      throw new Error(`Kimi API error: ${response.status} - ${error}`);
+      throw new Error(`OpenRouter API error: ${response.status} - ${error}`);
     }
 
     const data = (await response.json()) as OpenAIResponse;
@@ -116,18 +118,20 @@ export class KimiProvider implements AIProvider {
       }
     }
 
-    const response = await fetch(KIMI_API_URL, {
+    const response = await fetch(OPENROUTER_API_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${this.apiKey}`,
+        "Authorization": `Bearer ${this.apiKey}`,
+        "HTTP-Referer": "https://forage.grove.place",
+        "X-Title": "Forage Domain Search",
       },
       body: JSON.stringify(body),
     });
 
     if (!response.ok) {
       const error = await response.text();
-      throw new Error(`Kimi API error: ${response.status} - ${error}`);
+      throw new Error(`OpenRouter API error: ${response.status} - ${error}`);
     }
 
     const data = (await response.json()) as OpenAIResponse;

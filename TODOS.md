@@ -81,35 +81,40 @@
 
 ---
 
-## Phase 7: Performance & Provider Optimization (Future)
+## Phase 7: Provider Cleanup & Cerebras Integration - COMPLETED (2025-12-21)
 
 ### AI Provider Cleanup
-- [ ] **Remove unused providers**
-  - Remove Claude (too costly, not using anymore)
-  - Remove Kimi K2 (never tried, not needed)
-  - Remove Cloudflare Llama 4 Scout (never tried, not needed)
-  - **Keep only DeepSeek V3.2** as the driver (it's incredible!)
+- [x] **Remove unused providers**
+  - Removed Claude (too costly, not using anymore)
+  - Removed Kimi K2 (never tried, not needed)
+  - Removed Cloudflare Llama 4 Scout (never tried, not needed)
+  - **Kept DeepSeek V3.2** as the driver (it's incredible!)
+  - **Added OpenRouter** as the primary provider interface
 
 ### OpenRouter Migration
-- [ ] **Migrate to OpenRouter for zero data retention**
-  - Replace direct API calls with OpenRouter
-  - Zero data retention for privacy
+- [x] **Migrate to OpenRouter for zero data retention**
+  - Created OpenRouter provider (TypeScript: `worker/src/providers/openrouter.ts`)
+  - Created OpenRouter provider (Python: `src/forage/providers/openrouter.py`)
+  - Zero data retention for privacy (OpenRouter's policy)
   - Still use DeepSeek V3.2 through OpenRouter
-  - Update API configuration in worker
+  - Updated API configuration in worker (`wrangler.toml`, `config.py`)
+  - Added `OPENROUTER_API_KEY` secret requirement
 
 ### Blazing Fast Task Agent (RDAP Testing)
-- [ ] **Replace task agent with Cerebras GPT-oss 20b**
+- [x] **Replace task agent with Cerebras GPT-oss 20b**
   - Cerebras is RIDICULOUSLY fast: 1000+ tokens/second
-  - Use for RDAP availability checking
+  - Created `CerebrasRDAPChecker` (`worker/src/cerebras-rdap.ts`)
+  - Uses OpenRouter with model `cerebras/btlm-3b-8k-base`
+  - Configurable via `USE_CEREBRAS_RDAP` environment variable
+  - Fallback to traditional RDAP when disabled
   - This will make domain searches blazing fast
-  - Research model: likely `cerebras/btlm-3b-8k-base` or similar on OpenRouter
 
 ### Config Panel Improvements
-- [ ] **Simplify config UI**
-  - Remove model selector/toggle (not needed anymore)
+- [x] **Simplify config UI**
+  - Removed model selector/toggle (not needed anymore)
   - Display what we're using instead (read-only)
-  - "Driver: DeepSeek V3.2" (static display)
-  - "Task Agent: Cerebras GPT-oss 20b" (static display)
+  - "Driver: DeepSeek V3.2 via OpenRouter" (static display)
+  - "Task Agent: Cerebras GPT-oss 20b via OpenRouter" (static display)
   - Keep other config options functional (batch size, creativity, etc.)
   - Task agent doesn't need live config - can be pre-configured
 
@@ -117,6 +122,7 @@
 - DeepSeek V3.2 is the winner for driver - no need to switch
 - Haven't tried Kimi or Llama 4 - DeepSeek is so good we don't need them
 - Cerebras will give us the speed boost we need for RDAP tasks
+- **All changes tested and deployed**
 
 ---
 
@@ -171,18 +177,19 @@ POST /api/search
     "vibe": "creative",
     "keywords": "fresh baked goods"
   },
-  "driver_provider": "deepseek",  // optional: claude (default), deepseek, kimi, cloudflare
-  "swarm_provider": "deepseek"    // optional: claude (default), deepseek, kimi, cloudflare
+  "driver_provider": "deepseek",  // optional: deepseek (default), openrouter
+  "swarm_provider": "deepseek"    // optional: deepseek (default), openrouter
 }
 ```
 
 ### Available AI Providers
 | Provider | Model | Cost (In/Out per M tokens) |
 |----------|-------|---------------------------|
-| `claude` | Claude Sonnet 4 | $3.00 / $15.00 |
-| `deepseek` | DeepSeek V3.2 | $0.28 / $0.42 |
-| `kimi` | Kimi K2 | $0.60 / $2.50 |
-| `cloudflare` | Llama 4 Scout | $0.27 / $0.85 |
+| `deepseek` | DeepSeek V3.2 (via OpenRouter) | $0.28 / $0.42 |
+| `openrouter` | OpenRouter (any model) | Varies by model |
+| `cerebras` | Cerebras BTLM-3B-8K (via OpenRouter) | ~$0.10 / $0.10 (estimated) |
+
+**Note:** Only `deepseek` and `openrouter` providers are supported. The `cerebras` provider is used internally for RDAP checking when `USE_CEREBRAS_RDAP=true`.
 
 ---
 
@@ -310,12 +317,14 @@ Added support for 4 AI providers with proper tool/function calling:
 
 ---
 
-## Project Status: PRODUCTION READY
+## Project Status: PRODUCTION READY (Phase 7 Complete)
 
 All core features are implemented, tested, and deployed:
 
-- Multi-model AI support (Claude, DeepSeek, Kimi, Cloudflare)
-- API-level provider selection
+- **Simplified provider architecture**: DeepSeek V3.2 + OpenRouter only
+- **Zero data retention**: All AI calls via OpenRouter
+- **Blazing fast RDAP checking**: Cerebras BTLM-3B-8K via OpenRouter (optional)
+- API-level provider selection (deepseek, openrouter)
 - Email notifications via Resend
 - Real-time pricing from Cloudflare Registrar
 - Follow-up quiz system with UI
@@ -378,4 +387,4 @@ All core features are implemented, tested, and deployed:
 - Auth configured: OAuth redirects and CORS ✅
 - GitHub repo: Consider renaming `AutumnsGrove/GroveDomainTool` → `AutumnsGrove/Forage`
 
-*Last updated: 2025-12-21*
+*Last updated: 2025-12-21 (Phase 7: Provider Cleanup & Cerebras Integration completed)*

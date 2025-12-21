@@ -20,16 +20,18 @@ export interface Env {
   ANTHROPIC_API_KEY?: string;
   DEEPSEEK_API_KEY?: string;
   KIMI_API_KEY?: string;
+  OPENROUTER_API_KEY?: string;
   RESEND_API_KEY?: string;
 
   // Provider configuration
-  DRIVER_PROVIDER?: string; // claude | deepseek | kimi | cloudflare
-  SWARM_PROVIDER?: string; // claude | deepseek | kimi | cloudflare
+  DRIVER_PROVIDER?: string; // deepseek | openrouter
+  SWARM_PROVIDER?: string; // deepseek | openrouter
 
   // General settings
   ENVIRONMENT: string;
   MAX_BATCHES: string;
   TARGET_RESULTS: string;
+  USE_CEREBRAS_RDAP?: string; // "true" to use Cerebras for RDAP checking
 }
 
 // ============================================================================

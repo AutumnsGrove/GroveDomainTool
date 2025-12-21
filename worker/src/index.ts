@@ -176,7 +176,7 @@ async function handleSearch(
   }
 
   // Validate provider names if provided
-  const validProviders = ["claude", "deepseek", "kimi", "cloudflare"];
+  const validProviders = ["deepseek", "openrouter"];
   if (body.driver_provider && !validProviders.includes(body.driver_provider)) {
     return new Response(
       JSON.stringify({ error: `Invalid driver_provider. Valid options: ${validProviders.join(", ")}` }),
@@ -275,7 +275,7 @@ async function handleVibeSearch(
   }
 
   // Validate provider names if provided
-  const validProviders = ["claude", "deepseek", "kimi", "cloudflare"];
+  const validProviders = ["deepseek", "openrouter"];
   if (body.driver_provider && !validProviders.includes(body.driver_provider)) {
     return new Response(
       JSON.stringify({ error: `Invalid driver_provider. Valid options: ${validProviders.join(", ")}` }),
@@ -799,7 +799,7 @@ async function handleJobs(
           return { job_id: jobId, exists: false };
         }
 
-        const status = await response.json();
+        const status = await response.json() as Record<string, unknown>;
         return { job_id: jobId, exists: true, ...status };
       } catch {
         return { job_id: jobId, exists: false, error: "Failed to query" };

@@ -18,6 +18,7 @@ import type {
 import { generateCandidates, type DomainCandidate } from "./agents/driver";
 import { evaluateDomains, filterWorthChecking, type DomainEvaluation } from "./agents/swarm";
 import { checkDomainsParallel, type DomainCheckResult } from "./rdap";
+import { CerebrasRDAPChecker } from "./cerebras-rdap";
 import { getBatchPricing, type DomainPrice } from "./pricing";
 import { getProvider, type ProviderName } from "./providers";
 import { sendResultsEmail, sendFollowupEmail } from "./email";
@@ -856,10 +857,18 @@ export class SearchJobDO implements DurableObject {
       };
     }
 
-    // Step 3: Check availability via RDAP
+    // Step 3: Check availability via RDAP or Cerebras
     console.log(`Step 3: Checking availability for ${worthChecking.length} domains...`);
     const domainsToCheck = worthChecking.map(e => e.domain);
-    const rdapResults = await checkDomainsParallel(domainsToCheck, 5, 500);
+    let rdapResults: DomainCheckResult[];
+    if (this.env.USE_CEREBRAS_RDAP === "true") {
+      console.log("Using Cerebras RDAP checker");
+      const cerebrasChecker = new CerebrasRDAPChecker(this.env);
+      rdapResults = await cerebrasChecker.checkDomains(domainsToCheck);
+    } else {
+      console.log("Using traditional RDAP checker");
+      rdapResults = await checkDomainsParallel(domainsToCheck, 5, 500);
+    }
 
     // Step 4: Get pricing for available domains
     const availableDomainsList = rdapResults

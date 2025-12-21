@@ -2,17 +2,15 @@
 AI model providers for grove-domain-tool
 
 Supports multiple AI providers with a common interface.
-Providers: Claude (Anthropic), Kimi (Moonshot), DeepSeek, Cloudflare Workers AI
+Providers: DeepSeek, OpenRouter, Mock
 """
 
 from .base import (
     ModelProvider, ModelResponse, ProviderError, RateLimitError,
     AuthenticationError, ToolCallError, ToolDefinition, ToolCallResult
 )
-from .claude import ClaudeProvider
-from .kimi import KimiProvider
 from .deepseek import DeepSeekProvider
-from .cloudflare import CloudflareAIProvider
+from .openrouter import OpenRouterProvider
 from .mock import MockProvider
 from .tools import DRIVER_TOOL, SWARM_TOOL, tools_to_anthropic, tools_to_openai
 
@@ -27,10 +25,8 @@ __all__ = [
     "ToolDefinition",
     "ToolCallResult",
     # Providers
-    "ClaudeProvider",
-    "KimiProvider",
     "DeepSeekProvider",
-    "CloudflareAIProvider",
+    "OpenRouterProvider",
     "MockProvider",
     # Tools
     "DRIVER_TOOL",
@@ -45,7 +41,7 @@ def get_provider(name: str, **kwargs) -> ModelProvider:
     Factory function to get a provider by name.
 
     Args:
-        name: Provider name ('claude', 'kimi', 'deepseek', 'cloudflare', 'mock')
+        name: Provider name ('deepseek', 'openrouter', 'mock')
         **kwargs: Provider-specific options
 
     Returns:
@@ -55,10 +51,8 @@ def get_provider(name: str, **kwargs) -> ModelProvider:
         ValueError: If provider name is unknown
     """
     providers = {
-        "claude": ClaudeProvider,
-        "kimi": KimiProvider,
         "deepseek": DeepSeekProvider,
-        "cloudflare": CloudflareAIProvider,
+        "openrouter": OpenRouterProvider,
         "mock": MockProvider,
     }
 
