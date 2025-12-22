@@ -388,3 +388,9 @@ All core features are implemented, tested, and deployed:
 - GitHub repo: Consider renaming `AutumnsGrove/GroveDomainTool` → `AutumnsGrove/Forage`
 
 *Last updated: 2025-12-22 (Phase 7: Provider Cleanup & Cerebras Integration completed)*
+
+## Future: GroveAuth Integration for GroveDomainTool Worker
+- [ ] Integrate GroveAuth/Heartwood into forage worker for API authentication
+- [ ] Currently using old magic code system - migrate to OAuth
+- [ ] Note: domains.grove.place (Pages UI) already has GroveAuth working
+

@@ -17,7 +17,7 @@ const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 export class OpenRouterProvider implements AIProvider {
   readonly name = "openrouter";
-  readonly defaultModel = "deepseek/deepseek-chat";
+  readonly defaultModel = "deepseek/deepseek-v3.2";
   readonly supportsTools = true;
 
   private apiKey: string;
