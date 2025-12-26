@@ -175,6 +175,10 @@ export class SearchJobDO implements DurableObject {
 
         // Send results email if client_email is provided
         await this.sendCompletionEmail(updatedJob);
+
+        // Clean up DO storage - workflow complete
+        await this.state.storage.deleteAll();
+        console.log(`[SearchJobDO] Workflow complete, storage cleared`);
       } else if (updatedJob.batch_num >= maxBatches) {
         // Need follow-up
         this.updateJobStatus("needs_followup");
@@ -192,6 +196,10 @@ export class SearchJobDO implements DurableObject {
     } catch (error) {
       console.error("Batch processing error:", error);
       this.updateJobStatus("failed", String(error));
+
+      // Clean up DO storage - workflow failed
+      await this.state.storage.deleteAll();
+      console.log(`[SearchJobDO] Workflow failed, storage cleared`);
     }
   }
 
@@ -400,6 +408,10 @@ export class SearchJobDO implements DurableObject {
 
     // Update status to cancelled
     this.updateJobStatus("cancelled");
+
+    // Clean up DO storage - workflow cancelled
+    await this.state.storage.deleteAll();
+    console.log(`[SearchJobDO] Workflow cancelled, storage cleared`);
 
     return new Response(
       JSON.stringify({
